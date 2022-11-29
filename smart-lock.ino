@@ -62,7 +62,7 @@ bool lockStatus = true;
 
 enum entryEvent {rfidUnlock, pinUnlock, failedPin, failedRfid, powerUp};
 
-const String entryEventDescriptions[] = {"Unlocked by keycard at: ", "Unlocked by pin at: ", "Unlocked by scanning RFID card at: ", "Failed pin attempt at: ",
+const String entryEventDescriptions[] = {"Unlocked by keycard at: ", "Unlocked by pin at: ", "Failed pin attempt at: ",
                                             "Invalid RFID card scanned at: ", "Powered on at: "};
 
 int pin[4] = {1, 2, 3, 4};
@@ -113,16 +113,16 @@ void log(entryEvent event){
     EEPROM[1] = 0;
     EEPROM[0] = 0x6;
     addr = 0x6;
-  } else{
+  }else{
     addr = EEPROM[1] << 8 + EEPROM[0] + 5;
     if(addr > EEPROM.length())
       addr = 0x6;
-    EEPROM[1] = (addr >> 8) & 0xFF;
+    EEPROM[1] = addr >> 8 & 0xFF;
     EEPROM[0] = addr & 0xFF;
   }
   unsigned long time = RTC.get();
   for(int i = 0; i < 4; i++)
-    EEPROM[addr+i] = (time >> i*8) & 0xFF;
+    EEPROM[addr+i] = time >> i*8 & 0xFF;
   EEPROM[addr+4] = event;
 }
 
@@ -180,7 +180,8 @@ void handleTone(){
           playedTone = true;
         if(currentTonePlayingNotes[i] != 0){
           tone(BUZZER_PIN, currentTonePlayingNotes[i]);
-        } else{
+        } 
+        else{
           noTone(BUZZER_PIN);
         }
         return;
@@ -215,17 +216,13 @@ void lock(){
   lockServo.write(0);
 }
 
-void unlock(int timeOut){
+void unlock(){
   if(lockStatus){
     lockStatus = false;
     lockServo.write(90);
     successTone();
-    lockTime = millis()+timeOut;
+    lockTime = millis()+2000;
   }
-}
-
-void unlock(){
-  unlock(2000);
 }
 
 void checkForLock(){
@@ -237,12 +234,8 @@ void checkForDisplayBacklight(){
   analogWrite(DISPLAY_BACKLIGHT_PIN, constrain(map(displayOffTime - millis() + displayTimeoutTime / 2, 0, displayTimeoutTime / 2, 0, 255), 0, 255););
 }
 
-void turnOnBacklight(int timeoutTime){
-  displayOffTime = millis() + timeoutTime;
-}
-
 void turnOnBacklight(){
-  turnOnBacklight(5000);
+  displayOffTime = millis() + 5000;
 }
 
 void checkPIR(){
@@ -281,8 +274,10 @@ bool checkPin(){
     lcd.print("Unlocked");
     turnOnBacklight();
     clearPin();
-  } else{
+  } 
+  else{
     log(failedPin);
+    failureTone();
     displayWrite = millis() + 2000;
     lcd.clear();
     lcd.setCursor(0, 0);
@@ -297,16 +292,17 @@ void pinCodeEntry(int num){
   pinTrial[pinEntryPos] = num;
   if(pinEntryPos == 3){
     checkPin();
-  } else if(pinTrial[0] == pinTrial[1] && pinTrial[1] == pinTrial[2] && (pinTrial[1] + pinTrial[2] + pinTrial[3]) == 0x12){
+  } 
+  else{
+    pinEntryPos++;
+  }
+
+  if(pinTrial[0] == pinTrial[1] && pinTrial[1] == pinTrial[2] && (pinTrial[1] + pinTrial[2] + pinTrial[3]) == 0x12){
     currentTonePlayingNotes = secretToneNotes;
     currentTonePlayingNotesLength = secretToneNotesLength;
     currentTonePlayingStartTime = millis();
     currentlyPlaying = true;
   }
-  else{
-    pinEntryPos++;
-  }
-  
 }
 
 void handleKeypad(){
@@ -362,7 +358,8 @@ void handleIR(){
 void handlePinEntry(){
   if(pinEntryResetTime < millis()){
     clearPin();
-  } else if(pinTrial[0] != -1){
+  } else {
+  if(pinTrial[0] != -1){
     displayWrite = millis() + 2000;
     lcd.clear();
     lcd.setCursor(0, 0);
@@ -373,7 +370,7 @@ void handlePinEntry(){
     }
     turnOnBacklight();
   }
-
+  }
 }
 
 void checkAccel(){
@@ -386,11 +383,8 @@ void checkAccel(){
 
 void handleCard(){
   if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()){
-    for(int i = 0; i < NUMBER_OF_ALLOWED_CARDS; i++)
-      if(rfid.uid.uidByte[0] == allowedCards[i][0] &&
-      rfid.uid.uidByte[1] == allowedCards[i][1] &&
-      rfid.uid.uidByte[2] == allowedCards[i][2] &&
-      rfid.uid.uidByte[3] == allowedCards[i][3]){
+    for(int i = 0; i < NUMBER_OF_ALLOWED_CARDS; i++){
+      if(rfid.uid.uidByte[0] == allowedCards[i][0] && rfid.uid.uidByte[1] == allowedCards[i][1] && rfid.uid.uidByte[2] == allowedCards[i][2] && rfid.uid.uidByte[3] == allowedCards[i][3]){
         log(rfidUnlock);
         displayWrite = millis() + 1000;
         lcd.clear();
@@ -403,12 +397,14 @@ void handleCard(){
         }
       else{
         log(failedRfid);
+        failureTone();
         displayWrite = millis() + 1000;
         lcd.clear();
         lcd.setCursor(0, 0);
         lcd.print("Invalid Keycard");
         turnOnBacklight();
         }
+    }
       }
 }
 
